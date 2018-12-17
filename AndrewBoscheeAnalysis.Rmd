@@ -1,0 +1,234 @@
+---
+title: "Analysis"
+author: "Andrew Boschee"
+date: "July 31, 2018"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+#Summary of Cleaning Data
+Aside from code initially given, we did some additional filtering and manual updates to recipes in R, SAS, and Excel.
+Simple measurements were replaced such as tablespoon, teaspoon, and large were easily replaced. Others required merging tables for side-by-side comparison with database files.
+
+CombinedRecipesHalfAB2$Measure<- gsub("(T|t)bs", "tbsp", CombinedRecipesHalfAB$Measure)
+CombinedRecipesHalfAB2$Measure<- gsub("tbspp", "tbsp", CombinedRecipesHalfAB$Measure)
+CombinedRecipesHalfAB2$Measure<- gsub("lrg", "large", CombinedRecipesHalfAB$Measure)
+
+The following recipes were removed:
+Dropped AsparagusTimbales, ChiliConCarne, Sukiyaki, Chow Mein as unable to find certain matching measurement for major ingredient
+Dropped mashed potatoes: had several issues and unsure of what to use for matching ingredient
+
+Removed spices, paprika as it was an unspecified serving size in recipes
+
+When measurements matched with database, calculations for grams were done to get all ingredients in the same unit. 
+
+Loop was used to calculate on table of recipes merged with databases.
+
+CalsFromFat<-c()
+CalsFromProtein <- c()
+CalsFromCarbs <- c()
+
+k <- nrow(m3)
+for(i in 1:k){
+  fat <- m3[i,14] * m3[i,12]
+  Protein <- m3[i,14]*m3[i,11]
+  Carbs <- m3[i, 14]*m3[i, 13]
+  CalsFromCarbs <- c(CalsFromCarbs, Carbs)
+  CalsFromFat <- c(CalsFromFat, fat)
+  CalsFromProtein <- c(CalsFromProtein, Protein)
+  
+}
+
+m3$CalsFromCarbs <- CalsFromCarbs
+m3$CalsFromFat <- CalsFromFat
+m3$CalsFromProtein <- CalsFromProtein
+
+#Databases
+
+These two databases contain the information needed to calculate the necessary grams and nutrition facts for each recipe
+```{r}
+food_des.dat <- read.table("FOOD_DES.txt", header=FALSE, sep="^",quote="~")
+names(food_des.dat) <- c("NDB_No","FdGrp_Cd","Long_Desc","Shrt_Desc",
+"ComName","ManufacName","Survey","Ref_desc","Refuse","SciName",
+"N_Factor","Pro_Factor","Fat_Factor","CHO_Factor")
+head(food_des.dat)
+
+weight.dat <- read.table("WEIGHT.txt", header=FALSE, sep="^", quote="~")
+names(weight.dat) <- c("NDB_No","Seq","Amount","Msre_Desc","Gm_Wgt","Num_Data_Pts","Std_Dev")
+head(weight.dat)
+```
+The below table shows breakdown of grams, calories from carbs, fat, and protein for each ingredient by recipe using the factors from the database.
+
+## AtWater Analysis
+
+matchFinal is the final touched up csv file
+```{r}
+AtwaterOne <- read.csv(file="D:\\matchFinal.csv", header=TRUE)
+head(AtwaterOne)
+
+```
+# Including Plots(Initial Impression)
+
+All Ingredients being compared in one table
+```{r}
+plot(AtwaterOne$CalsFromCarbs, col= 'blue', ylab="Calories", xlab="Ingredients")
+points(AtwaterOne$CalsFromFat, col= 'red')
+points(AtwaterOne$CalsFromProtein, col='black')    
+legend("topleft", legend=c("CalsFromFat", "CalsFromCarbs","CalsFromProtein"),
+       col=c("red", "blue", "black"), pch=0, cex=0.8)
+```
+
+To compare with the simple 4-4-9 method, I will use a loop to create columns for each factor and add it to the matchFinal table. Will create a data frame of theses and match it up with the mergedTable above
+```{r}
+pFact<- c()
+cFact<- c()
+fFact<- c()
+
+k <- nrow(AtwaterOne)
+for (i in 1:k){
+  proteinFactor <-4
+  carbFactor <- 4
+  fatFactor <- 9
+  pFact <- c(pFact, proteinFactor)
+  cFact <- c(cFact, carbFactor)
+  fFact <- c(fFact, fatFactor)
+}
+
+simpleFactors <- data.frame(pFact, cFact, fFact)
+
+AtWaterTwo <- cbind(AtwaterOne, simpleFactors)
+head(AtWaterTwo)
+
+```
+
+
+Will now add simple calculations to the tables to calculate total calores per ingredient and compare against ESHA measurements.
+```{r}
+simpleFat <- c()
+simpleCarb <- c()
+simpleProtein <- c()
+totalSimpleCalories <- c()
+totalESHACalories <- c()
+k <- nrow(AtWaterTwo)
+
+for(i in 1:k){
+  simpleFatCalc <- AtWaterTwo[i,20] * AtWaterTwo[i,14]
+  simpleCarbCalc <- AtWaterTwo[i, 19] * AtWaterTwo[i,14]
+  simpleProteinCalc <- AtWaterTwo[i, 18] * AtWaterTwo[i, 14]
+  simpleFat <- c(simpleFat, simpleFatCalc)
+  simpleCarb <- c(simpleCarb, simpleCarbCalc)
+  simpleProtein <- c(simpleProtein, simpleProteinCalc)
+}
+
+```
+
+Totals for each method being added to dataframe
+```{r}
+for (i in 1:k){
+  totalESHACaloriesCalc <- AtWaterTwo[i,15] + AtWaterTwo[i, 16] + AtWaterTwo[i, 17]
+  totalSimpleCaloriesCalc <- simpleFat[i]+simpleCarb[i]+simpleProtein[i]
+  totalSimpleCalories <- c(totalSimpleCalories, totalSimpleCaloriesCalc)
+  totalESHACalories <- c(totalESHACalories, totalESHACaloriesCalc)
+  
+}
+simpleNutrients <- data.frame(simpleProtein, simpleCarb, simpleFat, totalSimpleCalories)
+
+AtWaterThree <- cbind(AtWaterTwo, simpleNutrients, totalESHACalories)
+
+
+```
+
+Compute the difference between methods and add to dataframe
+```{r}
+k<-nrow(AtWaterThree)
+CalorieDifference <- c()
+for(i in 1:k){
+  CalDifference <- abs(totalESHACalories[i] - totalSimpleCalories[i])
+  CalorieDifference <- c(CalorieDifference, CalDifference)
+  }
+```
+
+Use histogram to look at how many ingredients have significant differance.
+```{r}
+
+multipleHist <- function(data, bins, title, xAxis){
+  k <- length(bins)
+  ints <-c()
+  for(i in 1:k){
+    ints <- c(ints, bins[i])
+    hist(data, breaks = ints[i], main = title, xlab= xAxis, ylab=sprintf("bins = %g ", bins[i]))
+
+  }
+
+}
+
+multipleHist(CalorieDifference, c(10,50,150), "CalorieDiscrepancy", "Number Of Calories Apart")
+
+
+```
+You can see that there are some extreme outliers in here, but looking at some of the outliers calories by ingredient made things clear. The number of servings is not taken into account since we are looking at total calories. Chicken Jambalaya is one of the major outliers and has ten servings which is a clear difference. Ham Cakes and pineapple is also a little questionable with the uncerainty about the unit used for pineapple ingredient that wasn't caught earlier. 
+
+Another issue that comes up is that the ESDA does not have values in the database for some of the calculations so the "difference" is simply the value from the simple calculation.
+
+We will look more in depth at the difference of ESDA vs Simple recipes and find which ingredients cause the largest differences 
+
+Note that the calculation for difference is simple value minus ESDA value.
+
+```{r}
+TopTen <- read.csv(file="TopTen.csv", header=TRUE)
+multipleHist(TopTen$diff, c(10,30), "With Null ESHA factors", "Calories Differing")
+```
+
+#Recipes and Ingredients Analyzed
+To fix this, I will take the top ten outlying recipes and remove the ingredients that don't have values in the ESDA database and rerun the graph.
+```{r}
+ModifiedTopTen <-read.csv(file="ModifiedTopTen.csv", header=TRUE)
+
+TopTenRecipes<-!duplicated(ModifiedTopTen$Recipe)
+FinalTopTen <-ModifiedTopTen$Recipe[TopTenRecipes]
+FinalTopTen
+
+```
+
+List of common outlying ingredients. The surprising part is that many of the biggest outliers are very common ingredients.
+```{r}
+TopTenRecipes <- !duplicated(ModifiedTopTen$Ingredient)
+OutlierIngredients<-ModifiedTopTen$Ingredient[TopTenRecipes]
+OutlierIngredients
+```
+```{r}
+TopTenIngredients <- TopTen$Ingredient
+x <- barplot(table(TopTenIngredients), xaxt="n")
+labs <- paste(names(table(TopTenIngredients)), "Ingredient")
+text(cex=1, x=x-.25, y=-1.25, labs, xpd=TRUE, srt=90)
+
+```
+
+Tried to get a plot of the quantity of each outlying ingredient but they are a "little" too long. Still readable to get a look at the ingredients that are very common such as butter.
+```{r}
+multipleHist(ModifiedTopTen$diff, c(10,15), "Without null ESHA factor ingredients", "Calories Differing")
+
+```
+If there was more time, I would try to find other ingredients that may be somewhat similar with data provided to eliminate this issue and be more accurate. 
+```{r}
+par(mfrow=c(2,2))
+plot(ModifiedTopTen$simpleCarb, col= 'blue', ylab="Calories", xlab="Ingredients", main="Simple Calc")
+points(ModifiedTopTen$simpleFat, col = 'red')
+points(ModifiedTopTen$simpleProtein, col ='black')
+
+plot(ModifiedTopTen$CalsFromCarbs, col= 'blue', ylab="Calories", xlab="Ingredients", main="TopTen Simple")
+points(ModifiedTopTen$CalsFromFat, col= 'red')
+points(ModifiedTopTen$CalsFromProtein, col='black')
+
+plot(AtWaterThree$CalsFromCarbs, col='blue', ylab="Calories", xlab="Ingredients",main="Atwater Calc")
+points(AtWaterThree$CalsFromFat, col='red')
+points(AtWaterThree$CalsFromProtein, col='black')
+
+```
+
+
+Believe the biggest takeaway from this is that the Atwater method is more precise and reliable as they have a unique calculation per ingredient which can have a huge impact on certain ingredients. I believe there is a large impact as some of the main ingredients such as milk and lemon have some significant factoral differences. If there was more time to go back and analyze some of the ingredients missing data in the database my opinon may change.This shows the importance of having reliable data in order to make a justifiable decision. With nutrition being a very large controversy for peoples health, this is a topic that should require a very in depth and thourough analysis.
