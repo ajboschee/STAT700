@@ -1,0 +1,372 @@
+---
+title: "andrew.boschee.Final"
+output:
+  word_document: default
+  html_document: default
+---
+
+For the final, Aravind and I will be splitting tasks between each other using both SAS and R (I am more comfortable with R while he is more comfortable with SAS). SInce we are in different locations, you will see many files being read from and written to csv for us to transfer our data and perform clean up in both SAS and R as we put together a combined table for analysis at the end. 
+We begin with the given code from github to read in all the recipes and again add the database files in proper format.
+
+Just from first glance, rather than reordering the files and repeatedly running them back through the the code blocks, we will take bad recipes and put them in their own folder to create a table in excel and get a high level view on what we will be dealing with. We will see how much manual updates will be needed as we move on. 
+
+Since these tables are very large, we will not print out the tables but will attach them to the final submission.
+
+To not overwrite the tables we will take the write and read functions out of the codeblocks so we don't accidentally override our clean data.
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+food_des.dat <- read.table("FOOD_DES.txt", header=FALSE, sep="^",quote="~")
+names(food_des.dat) <- c("NDB_No","FdGrp_Cd","Long_Desc","Shrt_Desc",
+"ComName","ManufacName","Survey","Ref_desc","Refuse","SciName",
+"N_Factor","Pro_Factor","Fat_Factor","CHO_Factor")
+
+weight.dat <- read.table("WEIGHT.txt", header=FALSE, sep="^", quote="~")
+names(weight.dat) <- c("NDB_No","Seq","Amount","Msre_Desc","Gm_Wgt","Num_Data_Pts","Std_Dev")
+
+path.to.recipes <- "D:\\JoyOfCooking2018-master\\RecipeTables"
+recipe.files <- list.files(path = path.to.recipes)
+length(recipe.files)
+
+expected.columns <- c("Amount", "Measure", "Ingredient")
+added.columns <- c("NDB_No", "Year", "Recipe")
+
+recipe.list <- vector("list", length(recipe.files))
+names(recipe.list) <- recipe.files
+```
+Select only needed columns in food_des.dat and weight.dat
+```{r}
+
+Nutrients <- food_des.dat[c("NDB_No", "N_Factor", "Pro_Factor","Fat_Factor","CHO_Factor")]
+Weight<- weight.dat[c("NDB_No", "Amount", "Msre_Desc", "Gm_Wgt")]
+
+```
+
+
+
+```{r}
+
+minimum.headers <- function(names){
+  for(name in expected.columns){
+    if(!(name %in% names)){
+      return(FALSE)
+    }
+  }
+  return(TRUE)
+}
+
+minimum.headers(expected.columns)
+
+
+```
+
+
+```{r}
+parse.filename <- function(name){
+  return(list(Year=0, Recipe=name))
+}
+
+```
+
+```{r}
+conforming.files <- 0
+nonconforming.files <- c()
+
+for(recipe in recipe.files) {
+  file.name <- paste(path.to.recipes,'/',recipe,sep='')
+  current <- NULL
+  #read the first line
+  connection <- file(file.name)
+  first.line <- readLines(connection,n=1)
+  close(connection) #R won't be happy if we don't close the file
+  
+  #if the first line can be split by tabs, then use tabs as delimiter
+  first.tokens <- strsplit(first.line,split='\t')[[1]]
+  #some files will be written with quoted text. 
+  #The various `read` functions will strip the quotes, 
+  #but here we have to do this manually.
+  first.tokens <-gsub('\"','', first.tokens)
+  if(minimum.headers(first.tokens)) {
+    #read as tab-delimited 
+    recipe.list[[recipe]] <- read.table(file.name,
+                                        sep='\t',
+                                        stringsAsFactors = FALSE,
+                                        header=TRUE)
+    conforming.files <- conforming.files+1
+  } else {
+    #second guess is spaces.
+    first.tokens <- strsplit(first.line,split=' ')[[1]]
+    first.tokens <-gsub('\"','', first.tokens)
+    if(minimum.headers(first.tokens)) {
+      recipe.list[[recipe]] <- read.table(file.name,
+                                          header=TRUE,
+                                          stringsAsFactors = FALSE)
+      conforming.files <- conforming.files+1
+    } else {
+      #save a list for later
+      nonconforming.files <- c(nonconforming.files,recipe)
+      print(recipe)
+      print(first.line)
+    }
+  }
+}
+conforming.files
+nonconforming.files
+
+```
+
+Due to the number of issues in the structure of the dat and txt files. nonconforming recipes were opened in excel and formatted with proper columns and formatting. With the various types of errors occurring throw all recipes, it was time-efficient to split the files up between the two of us and reimport them in later steps. Issues included unnecessary index columns added, inconsistent ordering of columns and column naming issues. Seeing these files in excel also allowed to see common errors with ingredients and measurements.
+
+```{r}
+join.names <- c(expected.columns, added.columns)
+join.frame <-data.frame(matrix(vector(), nrow=0, ncol=length(join.names),
+                dimnames=list(c(), join.names)),
+                stringsAsFactors=F)
+test.frame <- join.frame
+```
+
+```{r}
+for(idx in 1:length(recipe.files)) {
+  file.name <- recipe.files[idx]
+  tbl <- recipe.list[[file.name]]
+  if('NBD_No' %in% names(tbl)) {
+    nbd.idx <- which(names(tbl)=='NBD_No')
+    names(tbl)[nbd.idx] <- added.columns[1]
+    recipe.list[[file.name]] <- tbl
+  }
+}
+
+```
+
+#WHICH COLUMNS TO FIX
+```{r}
+conforming.tables <- 0
+nonconforming.tables <- c()
+
+for(idx in 1:length(recipe.files)) {
+  file.name <- recipe.files[idx]
+  if(!(file.name %in% nonconforming.files)) {
+    tbl <- recipe.list[[file.name]]
+    if(length(names(tbl)) == 3) {
+      #We tested against Ingredient,Amount and Measure, so append
+      #an empty NBD_No. We will attempt to look up thos later.
+      #if we sort the data by ingredient, and multiple recipes have the 
+      #same incredients, we may be able to save some searches.
+      tbl$NBD_No <- NA
+    }
+    if(length(names(tbl)) == 4) {
+      # we assume, for now, that the table is missing Year and Recipe,
+      # so parse the file name for this information.
+      ids <- parse.filename(file.name)
+      tbl$Year <- ids$Year
+      tbl$Recipe <- ids$Recipe
+    }
+    test.tbl <- NULL
+    #put the join in a try block. This will allow us to
+    #process all files without having to stop and fix errors.
+    tryCatch(test.tbl <- rbind(test.frame, tbl[,join.names]),
+             error=function(e) {
+               print(file.name)
+               print(e)
+           })
+    #if we can bind to the empty table, we can merge this table with
+    #the rest
+    if(!is.null(test.tbl)) {
+      join.frame <- rbind(join.frame,tbl[,join.names])
+      conforming.tables <- conforming.tables + 1
+    } else {
+      nonconforming.tables <- c(nonconforming.tables,file.name)
+    }
+  }
+}
+conforming.tables
+nonconforming.tables
+```
+
+#REARRANGE COLUMNS
+Results from above with column errors needed simple column name adjustments. Opened these files up in excel and made column name updates to resolve issue to the tab file. Appeared that some columns ended up having indexes in first column and columns getting out of order. 
+
+#FIX NAMES AND ADD YEARS AND RECIPE COLUMNS
+Format the recipes that passed through to the join.frame. Used gsub to pull out any punctuation in the Recipe column and also grabbed the numbers using gsub for the year column. Some files had tab at the end and some did not. used grepl function to find recipes that did and removed the last three characters. The recipes that did not have tab in the name were stored seperately and then created a new vector to combine everthng as before and add in new columns "fixedRecipe" and "fixedYear". Last, rearranged the columns to desired order removing the original year and recipe columns.
+```{r}
+recipe.year<-gsub(pattern ="\\D", "", join.frame$Recipe)
+fixed.join.frame.recipe<-gsub(pattern ="[[:punct:]]", "", join.frame$Recipe)
+fixed.join.frame.recipe<-gsub(pattern ="\\d", "", fixed.join.frame.recipe)
+
+
+join.frame.tab <- grepl("tab$", fixed.join.frame.recipe)
+join.frame.not.tab <- fixed.join.frame.recipe[!join.frame.tab]
+fixed.join.frame.recipe.tab<-fixed.join.frame.recipe[join.frame.tab]
+fixed.join.frame.recipe.fixed.tab<-substr(fixed.join.frame.recipe.tab, 1, nchar(fixed.join.frame.recipe.tab)-3)
+
+fixed.join.frame.recipe <- c(fixed.join.frame.recipe.fixed.tab, join.frame.not.tab)
+fixed.join.frame.recipe <- sort(fixed.join.frame.recipe)
+join.frame$fixedRecipe <- fixed.join.frame.recipe
+join.frame$fixedYear <- recipe.year
+
+
+join.frame <- join.frame[c("Amount", "Measure", "Ingredient", "NDB_No","fixedYear","fixedRecipe")]
+names(join.frame)[5]<-"Year"
+names(join.frame)[6]<-"Recipe"
+
+fixedBadRecipes<-read.csv(file="FixedBadRecipes.csv", header = TRUE)
+CombinedRecipes<-rbind(fixedBadRecipes, join.frame)
+
+```
+We will now see our table comined with the bad recipes that we separated before
+
+    
+
+After seeing such a wide variety of errors, it seemed most time-efficient to sort by ingredient and NDB_No in excel to make changes in mass for many of the ingredient names and years to match database.
+
+```{r}
+CombinedRecipes<-CombinedRecipes[order(CombinedRecipes$Recipe),]
+
+write.csv(CombinedRecipes, file="CombinedRecipes.csv", row.names =FALSE)
+
+final.columns <- c(colnames(CombinedRecipes))
+
+minimum.headers.final <- function(names){
+  for(name in final.columns){
+    if(!(name %in% names)){
+      return(FALSE)
+    }
+  }
+  return(TRUE)
+}
+minimum.headers(final.columns)
+
+```
+
+
+
+To show our columns are in proper order, we replicated the minimumheaders function from earlier and adjusted it to the requirements of our final table from instructions. Created final columns vector from column names of our table and returned TRUE.
+
+#POOR RECIPES/INGREDIENTS
+Dropped AsparagusTimbales, chiliconcarne, sukiyaki, chow mein, ham cakes with pinapple: unable to find certain matching measurement for major ingredient
+Dropped mashed potatoes: had several issues and unsure of what to use for matching ingredient
+Duplicates of: LobsterMousse, IrishStew, Meatloaf
+
+Removed spices, paprike as it was an unspecified serving size in recipes
+
+```{r}
+
+
+CombinedRecipesHalfAB2 <- read.csv(file="CombinedRecipesHalfAB.csv",header=TRUE)
+
+```
+#MATCHING UNITS WITH DATABASE
+With less variety in differences compared to earlier, we will now use sub function to do partial matching between our recipe table measurements and weight table measurements. There will still be many off that will require manual adjustments to prevent making improper changes
+```{r}
+
+CombinedRecipesHalfAB2$Measure<- gsub("(T|t)bs", "tbsp", CombinedRecipesHalfAB$Measure)
+CombinedRecipesHalfAB2$Measure<- gsub("tbspp", "tbsp", CombinedRecipesHalfAB$Measure)
+CombinedRecipesHalfAB2$Measure<- gsub("lrg", "large", CombinedRecipesHalfAB$Measure)
+
+write.csv(CombinedRecipesHalfAB2, file="CombinedRecipesEdited.csv", row.names=FALSE)
+FinalRecipesTable <- read.csv(file="CombinedRecipesEdited.csv", header=TRUE)
+```
+
+      
+
+
+
+#CALCULATING GRAMS AND NUTRIENTS
+now merge our updated table with the weight and nutrients by NDB_No.
+
+none of the water measurements lined up and since they don't contribute to calories we changed them to fl oz.
+Dropped coffee due to measurment discrepancy and low impact on nutrients
+
+```{r}
+m2 <- merge(FinalRecipesTable, Weight, by= "NDB_No", all.X= TRUE)
+
+m2<-m2[order(m2$Recipe),]
+write.csv(m2, file="merge2.csv", row.names=FALSE)
+```
+        
+
+Will see if there are any uncommon measurements between the Measure column and msre_desc column and update them so we line up with the database
+
+This table shows all possible measurement types in the msre_desc and replicates the other tables columns to match up with them. Later, when data is clean and necessary columns are added, we will bring it back to proper unique format.
+
+To get the grams calculated for each ingredient, grams will be an empty vector, and will loop through all rows of the merged table dividing the sevings amount by the recipe amount and multiplying by grams per serving. Column will then be added to the table.
+```{r}
+
+m3<- merge(m2, Nutrients, by.x = "NDB_No")
+
+
+grams<-c()
+
+k <- nrow(m2)
+
+for(i in 1:k){
+  g1 <- (m3[i,2]/m3[i,7])*m3[i,9]
+  grams <- c(grams, g1)
+
+}
+
+m3$Grams <- grams
+
+write.csv(m3, file="merge3.csv", row.names=FALSE)
+```
+        
+
+
+To calculate macro nutrients, we will loop through the carb, fat, and protein factors and multiply them by the number of grams.
+Row 12 is the databases fat factor, row 13 is the carb factor, and row 14 is the protein factor.
+
+Columns will then be merged onto the previous table
+```{r}
+CalsFromFat<-c()
+CalsFromProtein <- c()
+CalsFromCarbs <- c()
+
+k <- nrow(m3)
+for(i in 1:k){
+  fat <- m3[i,14] * m3[i,12]
+  Protein <- m3[i,14]*m3[i,11]
+  Carbs <- m3[i, 14]*m3[i, 13]
+  CalsFromCarbs <- c(CalsFromCarbs, Carbs)
+  CalsFromFat <- c(CalsFromFat, fat)
+  CalsFromProtein <- c(CalsFromProtein, Protein)
+  
+}
+
+m3$CalsFromCarbs <- CalsFromCarbs
+m3$CalsFromFat <- CalsFromFat
+m3$CalsFromProtein <- CalsFromProtein
+
+write.csv(m3, file="mergeAll.csv", row.names=FALSE)
+```
+
+      
+
+
+In SAS, Aravind created two tables, match and nonmatch, that filtered the merged table back to the point where each row is unique(well almost), and can begin analysis. Since several ingredients had multiple amounts per measurement descriptions it went through to the match csv table. Andrew will use the unique function in R from the tidyverse library to filter out the last of those duplicates from the matched table as well as rename the columns to meet desired final table.
+
+
+```{r}
+library("tidyverse")
+library("dplyr")
+
+matched <- read.csv(file="match.csv", header = TRUE)
+
+names(join.frame)[5]<-"Year"
+names(join.frame)[6]<-"Recipe"
+
+Ingredients.Test <- unique(matched)
+Ingredients <- Ingredients.Test[,c("Recipe", "Year", "Amount_x","Measure_x","Grams","Ingredient")]
+names(Ingredients)[3]<-"Amount"
+names(Ingredients)[4]<-"Measure"
+
+Ingredients
+
+write.csv(Ingredients, file="Ingredients.csv", row.names=FALSE)
+```
+Looking back and having a better overall understanding of the data and project, there were other ways for us to edit the data in a more programmatic way. With uncertainty in certain areas, and fear of losing data integrity, we did a little more manual updating than how we would if we went through the process again.
+      
+
+
+
