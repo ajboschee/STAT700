@@ -1,0 +1,227 @@
+---
+title: "2 Calculation Exercises"
+author: "Andrew Boschee"
+date: "6/5/2018"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r,echo=FALSE}
+options(digits=12)
+unit.test.points=0
+```
+
+# General instructions.
+
+Exercise 1 is required and must be solved using both R and SAS. This exercise is worht 20 points, 10 points each for R and SAS. The R portion is included in this document and includes a unit test that checks the results of your calculations. 
+
+Exercises 2 is also required, but you may choose to use either R or SAS. Make that you include in your code comments documeting your choice, don't simply submit the results without explanation. This exercise is worth 10 points.
+
+Exercises 3-5 are optional, choose two of three and document your choice. Your are also allowed to choose from either R or SAS. Choose only 1, each will be worth 10 points, and the entire assignment will be worth 50 points.
+
+Be sure to document your code and comment on the results.
+
+# Exercise 1 (R and SAS, required)
+
+
+Calculate Cohen's $d$ for calories per recipe, calories per serving and servings per recipe, comparing years 1936 and 2006. Use the formula
+$$
+d = \frac{|m_1-m_2|}{\sqrt{(s_1^2 + s_2^2)/2}}
+$$
+
+## Part a. 
+Enter the R code in the code chunk below, and assign a value to `d_12` for unit testing.
+
+Declared variables for the mean and standard deviation in 1936 and 2006 for calories per serving, servings per recipe, and calories per recipe. Calories per recipe is assigned to d_12 for unit testing.
+
+
+```{r}
+s_i <- 1050.0
+m_i <- 2123.8
+sd_1936_cps <- 124.8
+sd_2006_cps <- 168.3
+m_1936_spr <- 12.9
+m_2006_spr <- 12.7
+s_1936_spr <- 13.3
+s_2006_spr <- 13.0
+cps_1936 <- 268.1
+cps_2006 <- 436.9
+m_j <- 3051.9
+s_j <-1496.2
+
+d_calories_per_serving <- (abs(cps_2006-cps_1936))/(sqrt((sd_1936_cps^2 + sd_2006_cps^2)/2))
+d_calories_per_serving
+d_servings_per_recipe <- (abs(m_1936_spr-m_2006_spr))/(sqrt((s_1936_spr^2 + s_2006_spr^2)/2))
+
+d_12 <- (abs(m_i-m_j))/(sqrt((s_i^2 + s_j^2)/2))
+
+```
+
+```{r, unit test for exercise 1,echo=FALSE}
+if(abs(d_12-0.7181)<0.0001) {
+  print(unit.test.points <- unit.test.points+8)
+} else {
+  cat('d is not assigned the correct value','\n')
+}
+```
+
+## Part b.
+For the SAS portion, you may use PROC IML or macro language. Use `2 Calculations Template.sas` to start. This file contains unit tests for Exercises 1 and 2.
+
+# Exercise 2 (R or SAS, required)
+
+The probablity of an observation $x$, when taken from a normal population with mean $\mu$ and variance $\sigma^2$ is calculated by
+$$
+L (x ; \mu, \sigma^2) = \frac{1}{\sigma \sqrt{2 \pi}^{}} e^{- \frac{(x - \mu)^2}{2 \sigma^2}}
+$$
+For values of $x = \{ 0.1, 0.2 \}$, write code to calculate $L (x ; \mu = 0, \sigma = 1)$. Assign the values to `l_1` and `l_2`.
+  
+### Answer
+
+If you choose to do this exercise in R, use the unit test below.
+
+```{r}
+mu <- 0
+x_1 <- 0.1
+x_2 <- 0.2
+variance_1 <- 1
+
+
+x_minus_mean_sq_1 <- -1*((x_1-mu)^2)
+x_minus_mean_sq_2 <- -1*((x_2-mu)^2)
+
+sqrt_two_pi <- sqrt(2*pi)
+1/(sqrt_two_pi)*exp(1*(-1*((x_1-mu)^2))/(2*variance_1))
+
+
+l_1 <- 1/(sqrt_two_pi)*exp(1*(x_minus_mean_sq_1)/(2*variance_1))
+
+l_2 <- 1/(sqrt_two_pi)*exp(1*(x_minus_mean_sq_2)/(2*variance_1))
+```
+
+
+
+### Unit Test (R)
+```{r, unit test for exercise 2,echo=FALSE}
+if(abs(l_1 - 0.396952)<1e-6) {
+  print(unit.test.points <- unit.test.points + 4)
+} else {
+  print("likelihood for x = 0.1 incorrect")
+}
+
+if(abs(l_2 - 0.391043)<1e-6 ) {
+  print(unit.test.points <- unit.test.points + 4)
+} else {
+  print("likelihood for x = 0.2 incorrect")
+}
+```
+
+If you choose to do this exercise in SAS, you must do this in PROC IML, using the unit test template `2 Calculations.sas`.
+
+# Exercise 3 (R or SAS)
+
+## Part a
+
+Write code to compute
+  
+  $$7 - 1 \times 0 + 3 \div 3$$
+  
+Type this in verbatim, using only numbers, `-`,`*` and `/`, with no parenthesis. Do you agree with the result? Explain why, one or two sentences.
+
+#### Answer
+I agree with the answer due to the order of operations. Multiplication and division will be done first going left to right and followed by addition and subtraction resulting in 8
+```{r}
+7-1*0+3/3
+```
+
+## Part b
+
+  According to "Why Did 74% of Facebook Users Get This Wrong?" (<http://www.classroomprofessor.com/teaching-math/why-did-74pc-of-facebook-users-get-this-wrong/>), most people would compute the result as 1. 
+  Use parenthesis `( )` to produce this result.
+
+#### Answer
+
+```{r}
+(7-1)*0+(3/3)
+```
+
+## Part c
+
+Several respondents to the survey cited in Part 2 gave the answer 6. Add *one* set of parenthesis to produce this result.
+
+#### Answer
+```{r}
+7-1*(0+3/3)
+```
+
+# Exercise 4. (R or SAS)
+
+### Part a
+
+Quoting from Wansink and Payne
+
+> Because of changes in ingredients,
+the mean average calories in a recipe increased by 928.1 (from
+2123.8 calories ... to 3051.9 calories
+... ), representing a 43.7% increase.
+
+Show how 43.7% is calculated from 2123.8 and 3051.9, and confirm W&P result.
+
+> The resulting increase of 168.8 calories (from 268.1 calories ... to 436.9 calories ...) represents a 63.0% increase ... in calories per serving.
+
+### Part b
+
+Repeat the calculations from above and confirm the reported 63.0% increase in calories per serving.
+
+Part A shown with declared variable 'cprchange' to define average calories in a recipe change resulting in 43.7%.
+Part B shown with 'cpschange' to define the change in average calories per serving resulting in 63% increase.
+
+```{r}
+cprchange <- (m_j - m_i)/(m_i)
+print(cprchange)
+
+
+
+cpschange <- (cps_2006 - cps_1936)/cps_1936
+print(cpschange)
+```
+
+### Part c
+
+Using values from Table 1 Wansink, calculate the percent change in calories per serving from 1997 to 2006. How does this value compare to 63.0 increase as quoted in part b.?
+
+Calculation shown below with new variable declared using calories per serving from wansink table
+
+
+```{r}
+table_cps_2006 <- 384.4
+cps_1997 <- 288.6
+
+cpschange_97_to_06 <- (table_cps_2006 - cps_1997)/cps_1997
+print(cpschange_97_to_06)
+
+```
+
+
+# Exercise 5. (R or SAS)
+
+From Wansink and Payne
+> Given that the average 2006 recipe had 1.1 fewer servings than in 1936, the average calorie density per serving size has increased by 37.4% 
+
+From https://foodpsychology.cornell.edu/research/joy-cooking-too-much-70-years-calorie-increases-classic-recipes
+> "Also, the mean average calories per serving increased in 17 out of the 18 recipes by 37.4% from 268.1 calories to 436.9 calories"
+
+https://foodpsychology.cornell.edu/discoveries/joy-cooking-too-much
+>This expanded portion size helps explain why calories per serving have increased from an average of 168.8 calories to 436.9 calories, which is a 63% increase in calories per serving
+
+Show calculations in R or SAS to either confirm these statements (using values from Wansink Table 1) or show where the quoted values are inconsistent with Wansink Table 1.
+
+
+# Total points from unit tests
+```{r}
+unit.test.points
+```
+
+
+
